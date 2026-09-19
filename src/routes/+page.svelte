@@ -2,34 +2,56 @@
   import { onMount, onDestroy } from "svelte";
   import type { FoliateView, RelocateDetail } from "foliate-js/view.js";
 
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { readFile } from "@tauri-apps/plugin-fs";
+
   let viewerContainer: HTMLDivElement;
   let viewElement: FoliateView | undefined;
 
   // Hardcoded for testing, TODO: fix
-  export let epubUrl = "/test-data/book.epub"; // file would be in rinsham/static/test-data/book.epub
+  // export let epubUrl = "/test-data/book.epub"; // file would be in rinsham/static/test-data/book.epub
+  let error: string = "";
+  let bookTitle: string = "";
+
+  async function pickEpub(): Promise<File | null> {
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: "EPUB", extensions: ["epub"] }],
+    });
+    if (!selected) return null; // user cancelled
+
+    const path = Array.isArray(selected) ? selected[0]! : selected;
+    // Android silently ignores the filter above (no MIME entry for "epub"),
+    // so the picker there is effectively unfiltered — guard client-side.
+    if (!path.toLowerCase().endsWith(".epub")) return null;
+
+    const bytes = await readFile(path); // resolves content:// on Android, plain path elsewhere
+    const name = path.split(/[\\/]/).pop() ?? "book.epub";
+    return new File([bytes], name, { type: "application/epub+zip" });
+  }
+  async function openBook() {
+    error = "";
+    try {
+      const file = await pickEpub();
+      if (!file) return; // user cancelled
+      await viewElement?.open(file);
+      bookTitle = file.name;
+    } catch (e) {
+      console.error("Failed to open EPUB:", e);
+      error = e instanceof Error ? e.message : "Failed to open file";
+    }
+  }
 
   onMount(async () => {
-    // Dynamically import foliate-js to keep it strictly client-side.
-    // Importing registers the <foliate-view> custom element.
     await import("foliate-js/view.js");
-
-    // Create the custom web component element
     viewElement = document.createElement("foliate-view") as FoliateView;
     viewerContainer.appendChild(viewElement);
 
-    // Set up event listeners for navigation and progress tracking
     viewElement.addEventListener("relocate", (e) => {
       const detail = (e as CustomEvent<RelocateDetail>).detail;
       console.log("Location changed:", detail);
-      // detail contains trackable data like CFIs and progress percentages
     });
-
-    try {
-      // Load the book
-      await viewElement.open(epubUrl);
-    } catch (error) {
-      console.error("Failed to load EPUB:", error);
-    }
+    // no more auto-opening a hardcoded epubUrl here
   });
 
   // Cleanup on component destruction. onMount can only return a *synchronous*
@@ -51,6 +73,7 @@
 <div class="reader-wrapper">
   <!-- Navigation Controls -->
   <div class="toolbar">
+    <button on:click={openBook}>Open Book</button>
     <button on:click={prevPage}>Previous</button>
     <button on:click={nextPage}>Next</button>
   </div>
