@@ -35,6 +35,7 @@
       const file = await pickEpub();
       if (!file) return; // user cancelled
       await viewElement?.open(file);
+      viewElement?.goTo(2);
       bookTitle = file.name;
     } catch (e) {
       console.error("Failed to open EPUB:", e);
@@ -51,8 +52,33 @@
       const detail = (e as CustomEvent<RelocateDetail>).detail;
       console.log("Location changed:", detail);
     });
-    // no more auto-opening a hardcoded epubUrl here
+    viewElement.addEventListener("load", (e) => {
+      const { doc } = (e as CustomEvent<{ doc: Document; index: number }>)
+        .detail;
+      doc.addEventListener("pointerdown", handleZoneTap);
+    });
   });
+
+  function handleZoneTap(event: PointerEvent) {
+    // Ignore taps while the user is selecting text
+    const sel = (event.target as Element)?.ownerDocument?.getSelection?.();
+    if (sel && !sel.isCollapsed) return;
+
+    // TODO: allow user to click on links
+    if ((event.target as Element).closest("a")) {
+      return;
+    }
+
+    const width = (event.currentTarget as Document).defaultView!.innerWidth;
+    const x = event.clientX; // relative to the iframe's viewport
+
+    if (x < width * 0.3) {
+      prevPage();
+    } else if (x > width * 0.7) {
+      nextPage();
+    }
+    // middle 40% left as a no-op / future menu zone
+  }
 
   // Cleanup on component destruction. onMount can only return a *synchronous*
   // cleanup function, so with an async callback we use onDestroy instead.
