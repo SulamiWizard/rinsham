@@ -10,7 +10,8 @@
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "android:dev": "adb reverse tcp:1420 tcp:1420 && adb reverse tcp:1421 tcp:1421 && JAVA_HOME=/usr/lib/jvm/java-21-openjdk tauri android dev --host 127.0.0.1"
   },
   "license": "MIT",
   "dependencies": {
