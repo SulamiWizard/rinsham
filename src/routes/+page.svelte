@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import type { FoliateView, RelocateDetail } from "foliate-js/view.js";
 
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { readFile } from "@tauri-apps/plugin-fs";
 
-  let viewerContainer: HTMLDivElement;
   let viewElement: FoliateView | undefined;
 
   // Hardcoded for testing, TODO: fix
@@ -45,14 +44,15 @@
 
   onMount(async () => {
     await import("foliate-js/view.js");
-    viewElement = document.createElement("foliate-view") as FoliateView;
-    viewerContainer.appendChild(viewElement);
 
-    viewElement.addEventListener("relocate", (e) => {
+    // viewElement = document.createElement("foliate-view") as FoliateView;
+    // viewerContainer.appendChild(viewElement);
+
+    viewElement?.addEventListener("relocate", (e) => {
       const detail = (e as CustomEvent<RelocateDetail>).detail;
-      console.log("Location changed:", detail);
+      console.log("Location Changed:", detail);
     });
-    viewElement.addEventListener("load", (e) => {
+    viewElement?.addEventListener("load", (e) => {
       const { doc } = (e as CustomEvent<{ doc: Document; index: number }>)
         .detail;
       doc.addEventListener("pointerdown", handleZoneTap);
@@ -64,7 +64,7 @@
     const sel = (event.target as Element)?.ownerDocument?.getSelection?.();
     if (sel && !sel.isCollapsed) return;
 
-    // TODO: allow user to click on links
+    // Allow user to click on links such as table of content entries
     if ((event.target as Element).closest("a")) {
       return;
     }
@@ -80,12 +80,6 @@
     // middle 40% left as a no-op / future menu zone
   }
 
-  // Cleanup on component destruction. onMount can only return a *synchronous*
-  // cleanup function, so with an async callback we use onDestroy instead.
-  onDestroy(() => {
-    viewElement?.remove();
-  });
-
   // Example navigation controls
   function nextPage() {
     viewElement?.next();
@@ -93,6 +87,17 @@
 
   function prevPage() {
     viewElement?.prev();
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    switch (e.key) {
+      case "ArrowRight":
+        nextPage();
+        break;
+      case "ArrowLeft":
+        prevPage();
+        break;
+    }
   }
 </script>
 
@@ -102,11 +107,22 @@
     <button on:click={openBook}>Open Book</button>
     <button on:click={prevPage}>Previous</button>
     <button on:click={nextPage}>Next</button>
+    {#if bookTitle}
+      <!-- TODO: css for title -->
+      <p>{bookTitle}</p>
+    {/if}
   </div>
 
-  <!-- The container element where foliate-view will attach -->
-  <div bind:this={viewerContainer} class="viewer-container"></div>
+  {#if error}
+    <h1 class="errorText">{error}</h1>
+  {:else}
+    <!-- The container element where foliate-view will attach -->
+    <foliate-view bind:this={viewElement} class="viewer-container"
+    ></foliate-view>
+  {/if}
 </div>
+
+<svelte:window on:keydown|preventDefault={onKeyDown} />
 
 <style>
   .reader-wrapper {
