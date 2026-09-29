@@ -1,152 +1,84 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import type { FoliateView, RelocateDetail } from "foliate-js/view.js";
-
+  import LibraryEntry from "$lib/components/LibraryEntry.svelte";
+  import type { ScannedFile } from "$lib/types";
+  import { basename } from "@tauri-apps/api/path";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import { readFile } from "@tauri-apps/plugin-fs";
+  import { open } from "@tauri-apps/plugin-fs";
 
-  let viewElement: FoliateView | undefined;
+  // TODO: use real books from scan instead of fake placeholders
+  const book1: ScannedFile = {
+    path: "book1.epub",
+    name: "Book 1",
+    size: 1024,
+  };
+  const book2: ScannedFile = {
+    path: "book2.epub",
+    name: "Book 2",
+    size: 1024,
+  };
 
-  // Hardcoded for testing, TODO: fix
-  // export let epubUrl = "/test-data/book.epub"; // file would be in rinsham/static/test-data/book.epub
-  let error: string = "";
-  let bookTitle: string = "";
+  let books: ScannedFile[] = $state([book1, book2]);
 
-  async function pickEpub(): Promise<File | null> {
+  // TODO: file browser to choose directory and scan
+
+  async function scanDir(): Promise<string[] | null> {
     const selected = await openDialog({
-      multiple: false,
-      filters: [{ name: "EPUB", extensions: ["epub"] }],
+      multiple: true,
+      directory: true,
     });
+    console.log(selected);
+    // TODO: recursive walk through dir to find all the books
     if (!selected) return null; // user cancelled
-
-    const path = Array.isArray(selected) ? selected[0]! : selected;
-    // Android silently ignores the filter above (no MIME entry for "epub"),
-    // so the picker there is effectively unfiltered — guard client-side.
-    if (!path.toLowerCase().endsWith(".epub")) return null;
-
-    const bytes = await readFile(path); // resolves content:// on Android, plain path elsewhere
-    const name = path.split(/[\\/]/).pop() ?? "book.epub";
-    return new File([bytes], name, { type: "application/epub+zip" });
-  }
-  async function openBook() {
-    error = "";
-    try {
-      const file = await pickEpub();
-      if (!file) return; // user cancelled
-      await viewElement?.open(file);
-      viewElement?.goTo(2);
-      bookTitle = file.name;
-    } catch (e) {
-      console.error("Failed to open EPUB:", e);
-      error = e instanceof Error ? e.message : "Failed to open file";
+    for (const file of selected) {
+      let book = await scanFile(file);
+      if (book) {
+        books.push(book);
+      }
     }
+    return selected;
   }
 
-  onMount(async () => {
-    await import("foliate-js/view.js");
-
-    // viewElement = document.createElement("foliate-view") as FoliateView;
-    // viewerContainer.appendChild(viewElement);
-
-    viewElement?.addEventListener("relocate", (e) => {
-      const detail = (e as CustomEvent<RelocateDetail>).detail;
-      console.log("Location Changed:", detail);
-    });
-    viewElement?.addEventListener("load", (e) => {
-      const { doc } = (e as CustomEvent<{ doc: Document; index: number }>)
-        .detail;
-      doc.addEventListener("pointerdown", handleZoneTap);
-    });
-  });
-
-  function handleZoneTap(event: PointerEvent) {
-    // Ignore taps while the user is selecting text
-    const sel = (event.target as Element)?.ownerDocument?.getSelection?.();
-    if (sel && !sel.isCollapsed) return;
-
-    // Allow user to click on links such as table of content entries
-    if ((event.target as Element).closest("a")) {
-      return;
+  async function scanFile(path: string): Promise<ScannedFile | null> {
+    // if file is not epub return null
+    if (!path.endsWith(".epub")) {
+      return null;
     }
 
-    const width = (event.currentTarget as Document).defaultView!.innerWidth;
-    const x = event.clientX; // relative to the iframe's viewport
+    // scan file and return ScannedFile struct/interface
+    const file = await open(path);
+    const fileInfo = await file.stat();
+    const book: ScannedFile = {
+      path: path,
+      name: await basename(path),
+      size: fileInfo.size,
+    };
 
-    if (x < width * 0.3) {
-      prevPage();
-    } else if (x > width * 0.7) {
-      nextPage();
-    }
-    // middle 40% left as a no-op / future menu zone
-  }
-
-  // Example navigation controls
-  function nextPage() {
-    viewElement?.next();
-  }
-
-  function prevPage() {
-    viewElement?.prev();
-  }
-
-  function onKeyDown(e: KeyboardEvent) {
-    switch (e.key) {
-      case "ArrowRight":
-        nextPage();
-        break;
-      case "ArrowLeft":
-        prevPage();
-        break;
-    }
+    return book;
   }
 </script>
 
-<div class="reader-wrapper">
-  <!-- Navigation Controls -->
-  <div class="toolbar">
-    <button on:click={openBook}>Open Book</button>
-    <button on:click={prevPage}>Previous</button>
-    <button on:click={nextPage}>Next</button>
-    {#if bookTitle}
-      <!-- TODO: css for title -->
-      <p>{bookTitle}</p>
-    {/if}
-  </div>
+<!-- Entry page: Library -->
 
-  {#if error}
-    <h1 class="errorText">{error}</h1>
-  {:else}
-    <!-- The container element where foliate-view will attach -->
-    <foliate-view bind:this={viewElement} class="viewer-container"
-    ></foliate-view>
-  {/if}
+<!-- TODO: grid of library entries -->
+<div class="TEST"><button onclick={() => scanDir()}>OPEN DIALOGUE</button></div>
+<div class="Library-grid">
+  {#each books as book (book.path)}
+    <button class="entry-button" onclick={() => console.log(book.path)}>
+      <LibraryEntry entry={book} />
+      TODO!
+    </button>
+  {/each}
 </div>
 
-<svelte:window on:keydown|preventDefault={onKeyDown} />
-
 <style>
-  .reader-wrapper {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    width: 100%;
+  .entry-button {
+    width: auto;
   }
-  .toolbar {
+
+  .Library-grid {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    /* background-color: dodgerblue; */
     padding: 10px;
-    background: #f5f5f5;
-    display: flex;
-    gap: 10px;
-  }
-  .viewer-container {
-    flex: 1;
-    width: 100%;
-    height: 100%;
-    position: relative;
-  }
-  /* Ensure the custom element fills the container */
-  :global(foliate-view) {
-    width: 100%;
-    height: 100%;
-    display: block;
   }
 </style>
