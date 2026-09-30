@@ -60,9 +60,14 @@ pub fn library_dir(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub async fn scan_epubs(
     app: tauri::AppHandle,
+    dir: Option<String>,
     recursive: bool,
 ) -> Result<Vec<ScannedFile>, String> {
-    let dir = ensure_library_dir(&app)?.to_string_lossy().into_owned();
+    // Fall back to the app's library dir when no directory is provided.
+    let dir = match dir {
+        Some(dir) => dir,
+        None => ensure_library_dir(&app)?.to_string_lossy().into_owned(),
+    };
     tauri::async_runtime::spawn_blocking(move || scan_sync(&dir, recursive))
         .await
         .map_err(|e| format!("join error: {e}"))?
