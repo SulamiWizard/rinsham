@@ -9,6 +9,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             library::library_dir,
             library::scan_epubs,
+            library::import_epubs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

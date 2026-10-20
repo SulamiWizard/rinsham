@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import type { FoliateView, RelocateDetail } from "foliate-js/view.js";
 
+  import { page } from "$app/state";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { readFile } from "@tauri-apps/plugin-fs";
 
@@ -9,8 +10,19 @@
 
   // Hardcoded for testing, TODO: fix
   // export let epubUrl = "/test-data/book.epub"; // file would be in rinsham/static/test-data/book.epub
+
   let error: string = "";
   let bookTitle: string = "";
+
+  async function loadEpub(path: string): Promise<File | null> {
+    // Android silently ignores the picker filter (no MIME entry for "epub"),
+    // so a path can arrive unfiltered — guard client-side.
+    if (!path.toLowerCase().endsWith(".epub")) return null;
+
+    const bytes = await readFile(path); // resolves content:// on Android, plain path elsewhere
+    const name = path.split(/[\\/]/).pop() ?? "book.epub";
+    return new File([bytes], name, { type: "application/epub+zip" });
+  }
 
   async function pickEpub(): Promise<File | null> {
     const selected = await openDialog({
@@ -20,22 +32,21 @@
     if (!selected) return null; // user cancelled
 
     const path = Array.isArray(selected) ? selected[0]! : selected;
-    // Android silently ignores the filter above (no MIME entry for "epub"),
-    // so the picker there is effectively unfiltered — guard client-side.
-    if (!path.toLowerCase().endsWith(".epub")) return null;
-
-    const bytes = await readFile(path); // resolves content:// on Android, plain path elsewhere
-    const name = path.split(/[\\/]/).pop() ?? "book.epub";
-    return new File([bytes], name, { type: "application/epub+zip" });
+    return loadEpub(path);
   }
+
+  async function showBook(file: File) {
+    await viewElement?.open(file);
+    viewElement?.goTo(2);
+    bookTitle = file.name;
+  }
+
   async function openBook() {
     error = "";
     try {
       const file = await pickEpub();
       if (!file) return; // user cancelled
-      await viewElement?.open(file);
-      viewElement?.goTo(2);
-      bookTitle = file.name;
+      await showBook(file);
     } catch (e) {
       console.error("Failed to open EPUB:", e);
       error = e instanceof Error ? e.message : "Failed to open file";
@@ -57,6 +68,19 @@
         .detail;
       doc.addEventListener("pointerdown", handleZoneTap);
     });
+
+    // Opened from the library: ?path=<epub> — load that book directly.
+    const path = page.url.searchParams.get("path");
+    if (path) {
+      error = "";
+      try {
+        const file = await loadEpub(path);
+        if (file) await showBook(file);
+      } catch (e) {
+        console.error("Failed to open EPUB:", e);
+        error = e instanceof Error ? e.message : "Failed to open file";
+      }
+    }
   });
 
   function handleZoneTap(event: PointerEvent) {
