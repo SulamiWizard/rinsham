@@ -128,6 +128,7 @@
 <div class="reader-wrapper">
   <!-- Navigation Controls -->
   <div class="toolbar">
+    <a href="/" rel="external"><button>Back to Library</button></a>
     <button on:click={openBook}>Open Book</button>
     <button on:click={prevPage}>Previous</button>
     <button on:click={nextPage}>Next</button>
